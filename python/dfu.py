@@ -104,8 +104,11 @@ class PandaDFU:
       uid_base = struct.unpack("H" * 6, bytes.fromhex(st))
       if mcu_type == McuType.H7:
         return binascii.hexlify(struct.pack("!HHH", uid_base[1] + uid_base[5], uid_base[0] + uid_base[4], uid_base[3])).upper().decode("utf-8")
-      else:
+      elif mcu_type == McuType.F4:
         return binascii.hexlify(struct.pack("!HHH", uid_base[1] + uid_base[5], uid_base[0] + uid_base[4] + 0xA, uid_base[3])).upper().decode("utf-8")
+      else:
+        # Unknown MCU type — do not silently fall through to F4 serial format.
+        return None
     except struct.error:
       return None
 
