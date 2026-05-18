@@ -1,0 +1,92 @@
+name: build-f4
+
+# Build the STM32F4 panda firmware (dos board, comma 3 internal panda).
+# Required after upstream commaai/panda removed F4 support in 1ce986f7
+# "bye bye f4" (Aug 2025). See F4_REVIVE.md for full context.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Opt into Node.js 24 runner now (Node 20 deprecated 2026-09-16).
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  build:
+    name: F4 firmware
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gcc-arm-none-eabi \
+            scons \
+            python3-pip \
+            python3-cffi
+          # apt python3-pycryptodome on Ubuntu 24.04 installs under the
+          # 'Cryptodome' namespace, but crypto/sign.py imports 'Crypto'.
+          # Pip's pycryptodome keeps the 'Crypto' namespace.
+          # opendbc.INCLUDE_PATH is consumed by SConscript — install from
+          # the same git source upstream panda pyproject.toml uses.
+          pip3 install --break-system-packages \
+            pycryptodome \
+            'opendbc @ git+https://github.com/commaai/opendbc.git@master'
+
+      - name: Show toolchain versions
+        run: |
+          arm-none-eabi-gcc --version | head -1
+          scons --version | head -1
+          python3 -c "from Crypto.PublicKey import RSA; print('pycryptodome OK')"
+          python3 -c "import opendbc; print('opendbc INCLUDE_PATH:', opendbc.INCLUDE_PATH)"
+
+      - name: Build F4 firmware
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          scons -Q --cache-disable -j$(nproc) \
+            board/obj/panda.bin.signed \
+            board/obj/bootstub.panda.bin
+
+      - name: Show build output
+        run: |
+          ls -l board/obj/panda.bin.signed board/obj/bootstub.panda.bin
+          md5sum board/obj/panda.bin.signed board/obj/bootstub.panda.bin
+          echo "gitversion: $(cat board/obj/version)"
+
+      - name: Summary
+        run: |
+          {
+            echo "## F4 firmware build"
+            echo ""
+            echo "| File | Size | md5 |"
+            echo "|------|------|-----|"
+            for f in board/obj/panda.bin.signed board/obj/bootstub.panda.bin; do
+              echo "| \`$f\` | $(stat -c %s "$f") B | \`$(md5sum "$f" | awk '{print $1}')\` |"
+            done
+            echo ""
+            echo "**gitversion baked in firmware:** \`$(cat board/obj/version)\`"
+            echo ""
+            echo "Built against \`commaai/opendbc master\` (vanilla safety modes — no \`tesla_preap\`)."
+          } >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: panda-f4-firmware-${{ github.sha }}
+          path: |
+            board/obj/panda.bin.signed
+            board/obj/bootstub.panda.bin
+            board/obj/version
+          retention-days: 30
+          if-no-files-found: error
