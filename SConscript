@@ -90,7 +90,10 @@ def build_project(project_name, project, main, extra_flags):
     CFLAGS=flags,
     ASFLAGS=flags,
     LINKFLAGS=flags,
-    CPPPATH=[Dir("./"), "./board/stm32f4/inc", "./board/stm32h7/inc", opendbc.INCLUDE_PATH],
+    # Prepend project-specific CPPPATH so e.g. F4 can shadow opendbc's
+    # CANPacket_t with a smaller buffer without leaking that override into
+    # H7 / jungle builds (which need upstream's full-FD buffer size).
+    CPPPATH=list(project.get("EXTRA_CPPPATH", [])) + [Dir("./"), "./board/stm32f4/inc", "./board/stm32h7/inc", opendbc.INCLUDE_PATH],
     ASCOM="$AS $ASFLAGS -o $TARGET -c $SOURCES",
     BUILDERS={
       'Objcopy': Builder(generator=objcopy, suffix='.bin', src_suffix='.elf')
@@ -125,6 +128,10 @@ base_project_f4 = {
   "STARTUP_FILE": "./board/stm32f4/startup_stm32f413xx.s",
   "LINKER_SCRIPT": "./board/stm32f4/stm32f4_flash.ld",
   "APP_START_ADDRESS": "0x8004000",
+  # F4-only: shadow pip-installed opendbc/safety/can.h with our overlay that
+  # shrinks CANPacket_t.data to 8 bytes so static buffers fit in F413's
+  # 256 KB RAM. Must come BEFORE opendbc.INCLUDE_PATH in CPPPATH.
+  "EXTRA_CPPPATH": ["./board/stm32f4/opendbc_overlay"],
   "FLAGS": [
     "-mcpu=cortex-m4",
     "-mhard-float",
