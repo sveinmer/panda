@@ -473,10 +473,9 @@ class Panda:
       logger.info("flash: already up to date")
       return
 
-    hw_type = self.get_type()
-    if hw_type in Panda.DEPRECATED_DEVICES:
-      raise RuntimeError(f"HW type {hw_type.hex()} is deprecated and can no longer be flashed.")
-
+    # C3 F4-revive: F4/DOS is in DEPRECATED_DEVICES (commaai removed F4 support
+    # in 1ce986f7 "bye bye f4"), but we explicitly re-introduced flashing
+    # support for the F4 in our F4-revive branch. Don't reject the flash.
     if not fn:
       fn = os.path.join(FW_PATH, self._mcu_type.config.app_fn)
     assert os.path.isfile(fn)
