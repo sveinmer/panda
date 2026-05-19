@@ -43,7 +43,7 @@ static int get_health_pkt(void *dat) {
   health->sbu2_voltage_mV = harness.sbu2_voltage_mV;
 
   health->som_reset_triggered = bootkick_reset_triggered;
-  health->sound_output_level = 0;
+  health->sound_output_level_pkt = 0;
 
   return sizeof(*health);
 }
